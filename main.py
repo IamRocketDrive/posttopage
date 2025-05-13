@@ -29,6 +29,59 @@ def clean_downloaded_folder():
             print(f"กำลังลบไฟล์: {file_path}")
             os.remove(file_path)
 
+def upscale_video(video_path, target_width=540, target_height=960):
+    print(f"กำลังตรวจสอบและ upscale วิดีโอ: {video_path}")
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print("ไม่สามารถเปิดวิดีโอได้")
+        return video_path
+
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    print(f"ขนาดวิดีโอดั้งเดิม: {width}x{height}")
+
+    if width >= target_width and height >= target_height:
+        print("ขนาดวิดีโอเพียงพอ ไม่ต้อง upscale")
+        cap.release()
+        return video_path
+
+    # คำนวณอัตราส่วนเพื่อรักษา aspect ratio
+    aspect_ratio = width / height
+    target_aspect = target_width / target_height
+
+    if aspect_ratio > target_aspect:
+        # วิดีโอกว้างเกินไป ปรับตามความสูง
+        new_height = target_height
+        new_width = int(new_height * aspect_ratio)
+    else:
+        # วิดีโอสูงเกินไป ปรับตามความกว้าง
+        new_width = target_width
+        new_height = int(new_width / aspect_ratio)
+
+    # ปรับขนาดให้เป็นจำนวนคู่ (จำเป็นสำหรับบาง codec)
+    new_width = new_width + (new_width % 2)
+    new_height = new_height + (new_height % 2)
+
+    output_path = os.path.join(os.path.dirname(video_path), "upscaled_video.mp4")
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    out = cv2.VideoWriter(output_path, fourcc, fps, (new_width, new_height))
+
+    print(f"กำลัง upscale เป็นขนาด: {new_width}x{new_height}")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        # Upscale เฟรม
+        upscaled_frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+        out.write(upscaled_frame)
+
+    cap.release()
+    out.release()
+    print(f"upscale เสร็จสิ้น บันทึกที่: {output_path}")
+    return output_path
+
+# ปรับปรุงฟังก์ชัน download_video เพื่อรวมการตรวจสอบและ upscale
 def download_video(shortcode):
     print("กำลังดาวน์โหลดวิดีโอด้วย shortcode:", shortcode)
     try:
@@ -38,7 +91,9 @@ def download_video(shortcode):
         for f in os.listdir("downloaded"):
             if f.endswith(".mp4"):
                 print("พบไฟล์วิดีโอ:", f)
-                return os.path.join("downloaded", f)
+                video_path = os.path.join("downloaded", f)
+                # ตรวจสอบและ upscale วิดีโอ
+                return upscale_video(video_path)
     except Exception as e:
         print("เกิดข้อผิดพลาดในการดาวน์โหลด:", e)
     return None
@@ -74,7 +129,7 @@ def add_caption_to_video(video_path, caption):
             print("สิ้นสุดการอ่านเฟรม")
             break
         frame_count += 1
-        print(f"กำลังประมวลผลเฟรมที่: {frame_count}")
+        #print(f"กำลังประมวลผลเฟรมที่: {frame_count}")
 
         img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         draw = ImageDraw.Draw(img_pil)
@@ -86,7 +141,7 @@ def add_caption_to_video(video_path, caption):
         draw.text((x, y), caption, font=font, fill=(255, 255, 255))
         frame = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
         out.write(frame)
-        print(f"เขียนเฟรม {frame_count} ไปที่ไฟล์")
+        #print(f"เขียนเฟรม {frame_count} ไปที่ไฟล์")
 
     cap.release()
     out.release()
